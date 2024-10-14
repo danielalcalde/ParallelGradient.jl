@@ -62,7 +62,35 @@ for (name, map_i) in maps, (name_l, loss_i) in losses
     end
 end
 
+
 function loss_scalar(d, map_func)
-    o = map_func(ci->func_scalar(d, ci), eachslice(c, dims=2))
-    return sum(abs2.(o .- y))
+    o = map_func(ci->func_scalar(d, ci)[1], eachslice(c, dims=2))
+    return sum(abs2.(o .- y[1,:]))
+end
+
+losses_scalar = OrderedDict(
+    "loss_scalar" => loss_scalar,
+    )
+
+
+maps_scalar = OrderedDict(
+    "dpmap" => dpmap_scalar,
+    )
+
+for (name_l, loss_i) in losses_scalar
+    l_true[name_l], g_true[name_l] = withgradient(Flux.params(d)) do
+        loss(d, map)
+    end
+end
+
+for (name, map_i) in maps_scalar, (name_l, loss_i) in losses_scalar
+    @testset "$(name)_$(name_l)" begin
+            @test loss(d, map_i) ≈ l_true[name_l]
+
+            l, g = withgradient(Flux.params(d)) do
+                loss_i(d, map_i)
+            end
+            @test l ≈ l_true[name_l]
+            @test g ≈ g_true[name_l]
+    end
 end

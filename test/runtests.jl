@@ -31,6 +31,7 @@ function Base.isapprox(g1::Zygote.Grads, g2::Zygote.Grads)
 end
 
 for file in readlines(joinpath(@__DIR__, "testgroups"))
-    println("Testing $file.jl")
-    include(file * ".jl")
+    @testset "$file" begin
+        include(file * ".jl")
+    end
 end

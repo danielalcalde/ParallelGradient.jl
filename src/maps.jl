@@ -1,128 +1,59 @@
-"""
-pmapw asks for specific workers for each job, other than that it is the same as pmap.
-"""
-function pmap_w(f, workers_::Vector{Int}, c; distributed=true, batch_size=1, on_error=nothing,
-                                           retry_delays=[], retry_check=nothing)
-    nr_workers = length(workers_)
-    f_orig = f
-    # Don't do remote calls if there are no workers.
-    if (length(workers_) == 0) || (length(workers_) == 1)
-        distributed = false
-    end
-
-    # Don't do batching if not doing remote calls.
-    if !distributed
-        batch_size = 1
-    end
-
-    # If not batching, do simple remote call.
-    if batch_size == 1
-        if on_error !== nothing
-            f = wrap_on_error(f, on_error)
-        end
-
-        if distributed
-            #f = remote(p, f)
-            f = (id, x) -> remotecall_fetch(f_orig, workers_[mod1(id, nr_workers)], x)
-        end
-
-        if length(retry_delays) > 0
-            f = wrap_retry(f, retry_delays, retry_check)
-        end
-
-        return asyncmap(f, 1:length(c), c; ntasks=()->nr_workers)
-    else
-        # During batch processing, We need to ensure that if on_error is set, it is called
-        # for each element in error, and that we return as many elements as the original list.
-        # retry, if set, has to be called element wise and we will do a best-effort
-        # to ensure that we do not call mapped function on the same element more than length(retry_delays).
-        # This guarantee is not possible in case of worker death / network errors, wherein
-        # we will retry the entire batch on a new worker.
-
-        handle_errors = ((on_error !== nothing) || (length(retry_delays) > 0))
-
-        # Unlike the non-batch case, in batch mode, we trap all errors and the on_error hook (if present)
-        # is processed later in non-batch mode.
-        if handle_errors
-            f = wrap_on_error(f, (x,e)->BatchProcessingError(x,e); capture_data=true)
-        end
-
-        f = wrap_batch(f, p, handle_errors)
-        results = asyncmap(f, c; ntasks=()->nworkers(p), batch_size=batch_size)
-
-        # process errors if any.
-        if handle_errors
-            process_batch_errors!(p, f_orig, results, on_error, retry_delays, retry_check)
-        end
-
-        return results
-    end
-end
-
-
-pmap_w(f, p::Vector{Int}, c1, c...; kwargs...) = pmap_w(a->f(a...), p, zip(c1, c...); kwargs...)
-
+pmap_w(f, workers::Vector{Int}, args...; kwargs...) = pmap_chuncked(f, args...; workers_=workers, kwargs...)
 const pmap_function_workerid_ = Dict{Any, Any}(pmap => pmap_w)
 
 
 cunkit(c, interval::UnitRange) = map(x->x[interval], c)
-
-
-function iterate_(f, args...)
-    R = zip(args...)
-    accum = Vector{Any}(undef, length(R))
-    for (i, args_i) in enumerate(R)
-        accum[i] = f(args_i...)
-    end
-    accum
-end
+iterate_(f, args...) = [f(args_i...) for args_i in zip(args...)]
      
-function pmap_chuncked(f, c1, c...; input_chunking=true)
+function pmap_chuncked(f, c1, c...; input_chunking=true, workers_::Vector{Int}=workers())
     f_orig = f
-    chunks = splitrange(Int(firstindex(c1)), Int(lastindex(c1)), nworkers())
-    all_w = workers()[1:length(chunks)]
+    chunks = splitrange(Int(firstindex(c1)), Int(lastindex(c1)), length(workers_))
+    all_w = workers_[1:length(chunks)]
     
+    if input_chunking
+        f = (x...) -> iterate_(f_orig, x...)
+    end
+
     w_exec = Task[]
     for (chunk, pid) in zip(chunks, all_w)
         b, e = first(chunk), last(chunk)
-        if input_chunking
-            f = (x...) -> iterate_(f_orig, x...)
-        end
-        
         t = Task(() -> remotecall_fetch(f, pid, c1[b:e], cunkit(c, b:e)...))
         schedule(t)
         push!(w_exec, t)
     end
-    a = vcat(fetch.(w_exec)...)
-    return a 
+    return vcat(fetch.(w_exec)...)
 end
+
 pmap_function_workerid_[pmap_chuncked] = nothing
 
 
-function tmap(f, args...)
+function tmap_simple(f, args...)
     tasks = map(args...) do (args_i...)
         Threads.@spawn f(args_i...)
-        #Threads.@spawn Base.invokelatest(f, args_i...)
     end
-    fetch.(tasks)
+    return fetch.(tasks)
 end
 
-function tmap_chunked(f, args...)
+function tmap(f, c1, c...)
+    f_orig = f
     nr_threads = Threads.nthreads()
     chunks = splitrange(Int(firstindex(c1)), Int(lastindex(c1)), nr_threads)
-    tasks = map(args...) do (args_i...)
-        Threads.@spawn f(args_i...)
-        #Threads.@spawn Base.invokelatest(f, args_i...)
+    f = (x...) -> iterate_(f_orig, x...)
+    w_exec = Task[]
+    for chunk in chunks
+        b, e = first(chunk), last(chunk)
+        t = Threads.@spawn f(c1[b:e], cunkit(c, b:e)...)
+        push!(w_exec, t)
     end
-    fetch.(tasks)
+    return vcat(fetch.(w_exec)...)
 end
 
 function get_nrthreads(; batch_size=nothing)
     local nr_threads
     if batch_size === nothing
-        nr_threads = pmap_w((_)->Threads.nthreads(), workers(), workers())
+        nr_threads = pmap_chuncked((_)->Threads.nthreads(), workers(); workers_=workers())
     elseif isinteger(batch_size)
-        nr_threads = [batch_size for _ in workers()]
+        nr_threads = Int[batch_size for _ in workers()]
     elseif batch_size isa Vector{Int}
         nr_threads = batch_size
     else

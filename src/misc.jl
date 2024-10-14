@@ -22,15 +22,16 @@ function vcat_vec(vs::NTuple{N, Vector{T}}; dims=length.(vs)) where {N, T}
 end
 
 Zygote.@adjoint function vcat_vec(vs::Vector{Vector{T}}) where T 
-    dims=length.(vs)
+    dims = length.(vs)
     function ∇vcat_vec(∇)
         ∇s = Vector{Vector{T}}(undef, length(dims))
-        j = 1
-        for (i, d) in enumerate(dims)
-            ∇s[i] = ∇[j:j+d-1]
-            j += d
+        local j = 1
+        function f(d)
+            ∇i = ∇[j:j+d-1]
+            j = j + d
+            return ∇i
         end
-        
+        ∇s = [f(d) for d in dims]
         return (∇s, )
     end
    return  vcat_vec(vs; dims), ∇vcat_vec

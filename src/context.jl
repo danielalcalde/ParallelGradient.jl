@@ -40,7 +40,11 @@ function update_context!(cx::Zygote.Context, cx2::Vector{Any}, params; factor=1)
         op = x -> x .* factor
     end
     for (i, p) in enumerate(params)
-        val = op(cx2[i])
+        val = cx2[i]
+        if val !== nothing
+            val = op(val)
+        end
+
         if !(p in keys(cache(cx))) || cache(cx)[p] === nothing
             cache(cx)[p] = val
         elseif val !== nothing && cache(cx)[p] !== nothing # Add the gradients
