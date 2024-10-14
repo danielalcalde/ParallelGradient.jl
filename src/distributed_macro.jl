@@ -9,7 +9,7 @@ macro distributed_map(loop)
         resize!(body.args, length(body.args) - 1)
     end
        
-    return :(pmap_chuncks($(make_preduce_body_map(var, body)), $(esc(r)); input_chunking=false))
+    return :(pmap_chuncked($(make_preduce_body_map(var, body)), $(esc(r)); input_chunking=false))
 
 end
 

@@ -78,7 +78,6 @@ function ∇dpmap(cx, f::F, args::Vararg{Any, N}; pmap_function=pmap, pmap_funct
             contexts = map(x->x[2], Δf_and_args_zipped_and_context)
             update_context!(cx, contexts, params)
         end
-
         (Δf, Δargs...)
       end
     
@@ -94,31 +93,68 @@ end
 mul_nothing(x, y::Nothing) = nothing
 mul_nothing(x::Nothing, y) = nothing
 mul_nothing(x, y) = x .* y
+is_nothing_or_zero(x) = isnothing(x) || iszero(x)
 
-dpmap_scalar(f, iter) = dpmap(f, iter)
-function ∇dpmap_scalar(cx, f::F, args::Vararg{Any, N}) where {F, N}   
-    ys_Δf = @distributed_map for args_i = args[1]
-        y, back = Zygote._pullback(cx, f, args_i)
-        y, back(1)
+
+dpmap_scalar(f, iter; pmap_function=pmap) = pmap_function(f, iter)
+function ∇dpmap_scalar(cx, f::F, args::Vararg{Any, N}; pmap_function=pmap) where {F, N}
+    cx_type = typeof(cx).parameters[1]
+
+    params = Flux.params()
+    if cx_type # Bad fix for not knowing which parameters are needed. We assume that the context should be filled with the parameters of the function
+        params = find_params(f)
     end
-    ys = [y for (y, Δf) in ys_Δf]
-    Δf_and_args_zipped = [Δf for (y, Δf) in ys_Δf]
+
+    function fw_and_bw(args_i...)
+        cxi = Zygote.Context{cx_type}(nothing)
+        y, back = Zygote._pullback(cxi, f, args_i...)
+        for p in params
+            cache(cxi)[p] = nothing
+        end
+        local b
+        if y isa Number
+            b = back(1)
+        elseif y isa Tuple
+            o = (1, (nothing for _ in y[2:end])...) # 
+            b = back(o)
+        else
+            error("The output of the function should be a number or a tuple, where the gradients should only be of the first element. Got $(typeof(y))")
+        end
+
+        cx_vec = cache_to_vector(cxi, params)
+
+        return y, b, cx_vec
+    end
+
+
+    ys_and_Δf_and_context = pmap_function(fw_and_bw, args...)
+
+    ys = [i[1] for i in  ys_and_Δf_and_context]
+    Δf_and_args_zipped = [i[2] for i in  ys_and_Δf_and_context]
+    context = [i[3] for i in  ys_and_Δf_and_context]
     
     arg_ax = map(_tryaxes, args)
-    function map_back(Δ)
-        # Multiply Δ with Δf_and_args_zipped
-        Δf_and_args_zipped = map((Δi, y) -> fmap(z->mul_nothing(z,Δi), y), Δ, Δf_and_args_zipped)
+    function map_back(Δs)
+        @assert length(Δs) == length(ys) "The length of the gradients should be the same as the length of the outputs"
+        Δs = map(zip(ys, Δs)) do (y, Δ)
+            if y isa Tuple
+                @assert length(Δ) == length(y) "The length of the gradients should be the same as the length of the outputs"
+                @assert all(is_nothing_or_zero.(Δ[2:end])) "If the output is a tuple, the gradients should only be taken of the first element. Got $(Δ[2:end])"
+                return Δ[1]
+            end
+            return Δ
+        end
+
+        # Multiply Δs with Δf_and_args_zipped
+        Δf_and_args_zipped = map((Δ, y) -> fmap(z->mul_nothing(z, Δ), y), Δs, Δf_and_args_zipped)
         Δf_and_args = _unzip(Δf_and_args_zipped, Val(N + 1))
         Δf = reduce(accum, Δf_and_args[1]; init=nothing)
         Δargs = map(_restore, Δf_and_args[2:end], arg_ax)
         
-        # TODO: Fix this to update the context cache properly
-        for s in keys(Δf)
-            if isdefined(f, s)
-                update_cache!(cx, getfield(Δf, s), getfield(f, s))
-            end
+        # Merge the context gotten from the different workers
+        if cx_type
+            update_context!(cx, context, params; factor=Δs)
         end
-        
         (Δf, Δargs...)
       end
     

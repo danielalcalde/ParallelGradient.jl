@@ -8,6 +8,7 @@ using Zygote
 using Functors
 using Flux
 
+include("misc.jl")
 include("debug.jl")
 include("context.jl")
 include("maps.jl")
@@ -16,7 +17,7 @@ include("dpmap.jl")
 include("dtmap.jl")
 
 
-
-export dpmap, dpmap_scalar, tmap, dtmap, ptmap
+export tmap, pmap_chuncked
+export dpmap, dpmap_scalar, dtmap, ptmap
 
 end # module ParallelGradient

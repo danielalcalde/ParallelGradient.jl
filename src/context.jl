@@ -30,27 +30,47 @@ end
 import Base.+
 +(::Nothing, ::Nothing) = nothing # Fix for summing nothing, TODO: Remove this
 
-function update_context!(cx, contexts, params)
-    for c in contexts
-        for (i, p) in enumerate(params)
-            if !(p in keys(cache(cx))) || cache(cx)[p] === nothing
-                cache(cx)[p] = c[i]
-            elseif c[i] !== nothing && cache(cx)[p] !== nothing # Add the gradients
-                cache(cx)[p] .+= c[i]
-            end
+function update_context!(cx::Zygote.Context, cx2::Vector{Any}, params; factor=1)
+    local op
+    if factor == 1
+        op = x->x
+    elseif factor == 0 || factor === nothing
+        op = x -> nothing
+    else
+        op = x -> x .* factor
+    end
+    for (i, p) in enumerate(params)
+        val = op(cx2[i])
+        if !(p in keys(cache(cx))) || cache(cx)[p] === nothing
+            cache(cx)[p] = val
+        elseif val !== nothing && cache(cx)[p] !== nothing # Add the gradients
+            cache(cx)[p] .+= val
         end
     end
 end
 
-function update_context!(cx, contexts)
-    for cxi in contexts
-        for (key, val) in cache(cxi)
-            if !(key in keys(cache(cx))) || cache(cx)[key] === nothing
-                cache(cx)[key] = val
-            elseif val !== nothing && cache(cx)[key] !== nothing # Add the gradients
-                cache(cx)[key] .+= val
-            end
+function update_context!(cx::Zygote.Context, cx2::Zygote.Context{true}; factor=1)
+    local op
+    if factor == 1
+        op = x->x
+    elseif factor == 0 || factor === nothing
+        op = x -> nothing
+    else
+        op = x -> x .* factor
+    end
+    for (key, val) in cache(cx2)
+        val = op(val)
+        if !(key in keys(cache(cx))) || cache(cx)[key] === nothing
+            cache(cx)[key] = val
+        elseif val !== nothing && cache(cx)[key] !== nothing # Add the gradients
+            cache(cx)[key] .+= val
         end
+    end
+end
+
+function update_context!(cx, contexts::Union{Vector{Vector{Any}}, Vector{Zygote.Context{true}}}, args...; factor=[1 for _ in contexts])
+    for (cxi, fac) in zip(contexts, factor)
+        update_context!(cx, cxi, args...; factor=fac)
     end
 end
 

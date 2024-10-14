@@ -77,7 +77,7 @@ function iterate_(f, args...)
     accum
 end
      
-function pmap_chuncks(f, c1, c...; input_chunking=true)
+function pmap_chuncked(f, c1, c...; input_chunking=true)
     f_orig = f
     chunks = splitrange(Int(firstindex(c1)), Int(lastindex(c1)), nworkers())
     all_w = workers()[1:length(chunks)]
@@ -96,7 +96,7 @@ function pmap_chuncks(f, c1, c...; input_chunking=true)
     a = vcat(fetch.(w_exec)...)
     return a 
 end
-pmap_function_workerid_[pmap_chuncks] = nothing
+pmap_function_workerid_[pmap_chuncked] = nothing
 
 
 function tmap(f, args...)
@@ -135,17 +135,19 @@ end
 ptmap combines pmap and tmap, it is a parallel map that uses calls threads on the workers for parallelism.
 The workers should be started with addprocs(nr_procs, exeflags="-t nr_threads")
 """
-function ptmap(f, args...; batch_size=nothing, kwargs...)
+function ptmap(f, args...; batch_size=nothing, dpmap_function=dpmap, dtmap_function=dtmap, kwargs...)
     # We need to split the arguments into chunks for each worker
-    nr_threads = Zygote.@ignore get_nrthreads(; batch_size)
-    chunks = Zygote.@ignore splitrange(Int(firstindex(args[1])), Int(lastindex(args[1])), nr_threads)
+    nr_threads = Zygote.@ignore_derivatives get_nrthreads(; batch_size)
+    chunks = Zygote.@ignore_derivatives splitrange(Int(firstindex(args[1])), Int(lastindex(args[1])), nr_threads)
     args_chunks = map(c -> cunkit(args, c), chunks)
 
     # Define a function that will be called on each worker
-    f_threaded(args_i) = dtmap(f, args_i...)
-    out = dpmap(f_threaded, args_chunks; kwargs...) # Vector{Vector{T}}
-    return vcat(out...) # Vector{T}
+    f_threaded(args_i) = dtmap_function(f, args_i...)
+    out = dpmap_function(f_threaded, args_chunks; kwargs...) # Vector{Vector{T}}
+    return vcat_vec(out) # Vector{T}
 end
+
+
 
 function splitbuckets(total, np::Vector{Int})
     buckets = zeros(Int, length(np))
