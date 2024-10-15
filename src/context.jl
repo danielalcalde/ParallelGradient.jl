@@ -30,51 +30,44 @@ end
 import Base.+
 +(::Nothing, ::Nothing) = nothing # Fix for summing nothing, TODO: Remove this
 
-function update_context!(cx::Zygote.Context, cx2::Vector{Any}, params; factor=1)
-    local op
-    if factor == 1
-        op = x->x
-    elseif factor == 0 || factor === nothing
-        op = x -> nothing
-    else
-        op = x -> x .* factor
+function fmap_sum(a, b)
+    fmap(a, b) do x, y
+        try
+            return x .+ y
+        catch
+            return x
+        end
     end
-    for (i, p) in enumerate(params)
+end
+
+function add_context!(cx::Zygote.Context, cx2::Vector{Any}, params; factor=1)
+    for (i, key) in enumerate(params)
         val = cx2[i]
-        if val !== nothing
-            val = op(val)
-        end
-
-        if !(p in keys(cache(cx))) || cache(cx)[p] === nothing
-            cache(cx)[p] = val
-        elseif val !== nothing && cache(cx)[p] !== nothing # Add the gradients
-            cache(cx)[p] .+= val
-        end
+        add_context_key!(cx, key, val; factor)
     end
 end
 
-function update_context!(cx::Zygote.Context, cx2::Zygote.Context{true}; factor=1)
-    local op
-    if factor == 1
-        op = x->x
-    elseif factor == 0 || factor === nothing
-        op = x -> nothing
-    else
-        op = x -> x .* factor
-    end
+function add_context!(cx::Zygote.Context, cx2::Zygote.Context{true}; factor=1)
     for (key, val) in cache(cx2)
-        val = op(val)
-        if !(key in keys(cache(cx))) || cache(cx)[key] === nothing
-            cache(cx)[key] = val
-        elseif val !== nothing && cache(cx)[key] !== nothing # Add the gradients
-            cache(cx)[key] .+= val
-        end
+        add_context_key!(cx, key, val; factor)
     end
 end
 
-function update_context!(cx, contexts::Union{Vector{Vector{Any}}, Vector{Zygote.Context{true}}}, args...; factor=[1 for _ in contexts])
+function add_context_key!(cx, key, val; factor=1)
+    if val !== nothing
+        val = mul_nothing(val, factor)
+    end
+    if !(key in keys(cache(cx))) || cache(cx)[key] === nothing
+        cache(cx)[key] = val
+    elseif val isa Base.RefValue
+    elseif val !== nothing && cache(cx)[key] !== nothing # Add the gradients
+        cache(cx)[key] = fmap_sum(cache(cx)[key], val)
+    end
+end
+
+function add_context!(cx, contexts::Union{Vector{Vector{Any}}, Vector{Zygote.Context{true}}}, args...; factor=[1 for _ in contexts])
     for (cxi, fac) in zip(contexts, factor)
-        update_context!(cx, cxi, args...; factor=fac)
+        add_context!(cx, cxi, args...; factor=fac)
     end
 end
 

@@ -31,7 +31,7 @@ function ∇dtmap(cx, f::F, args::Vararg{Any, N}; tmap_function=tmap) where {F, 
         
         # Merge the context gotten from the different threads into the context of the main thread
         if cx_type
-            update_context!(cx, contexts)
+            add_context!(cx, contexts)
         end
 
         (Δf, Δargs...)

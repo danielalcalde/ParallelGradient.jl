@@ -66,15 +66,15 @@ end
 ptmap combines pmap and tmap, it is a parallel map that uses calls threads on the workers for parallelism.
 The workers should be started with addprocs(nr_procs, exeflags="-t nr_threads")
 """
-function ptmap(f, args...; batch_size=nothing, dpmap_function=dpmap, dtmap_function=dtmap, kwargs...)
+function ptmap(f, args...; batch_size=nothing, pmap_function=pmap_chuncked, tmap_function=tmap, kwargs...)
     # We need to split the arguments into chunks for each worker
     nr_threads = Zygote.@ignore_derivatives get_nrthreads(; batch_size)
     chunks = Zygote.@ignore_derivatives splitrange(Int(firstindex(args[1])), Int(lastindex(args[1])), nr_threads)
     args_chunks = map(c -> cunkit(args, c), chunks)
 
     # Define a function that will be called on each worker
-    f_threaded(args_i) = dtmap_function(f, args_i...)
-    out = dpmap_function(f_threaded, args_chunks; kwargs...) # Vector{Vector{T}}
+    f_threaded(args_i) = dtmap(f, args_i...; tmap_function)
+    out = dpmap(f_threaded, args_chunks; pmap_function, kwargs...) # Vector{Vector{T}}
     return vcat_vec(out) # Vector{T}
 end
 

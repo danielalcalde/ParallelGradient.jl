@@ -7,10 +7,6 @@ l4 = 1
     return d(x)
 end
 
-@everywhere function func_scalar(d, x)
-    return (sum(d(x)), 0)
-end
-
 
 d1 = Dense(l1=>l2, tanh)
 d2 = Dense(l2=>l3, tanh)
@@ -64,7 +60,7 @@ end
 
 
 function loss_scalar(d, map_func)
-    o = map_func(ci->func_scalar(d, ci)[1], eachslice(c, dims=2))
+    o = map_func(ci->func(d, ci)[1], eachslice(c, dims=2))
     return sum(abs2.(o .- y[1,:]))
 end
 
@@ -74,7 +70,8 @@ losses_scalar = OrderedDict(
 
 
 maps_scalar = OrderedDict(
-    "dpmap" => dpmap_scalar,
+    "dpmap_scalar" => dpmap_scalar,
+    "dptmap_scalar" => dptmap_scalar
     )
 
 for (name_l, loss_i) in losses_scalar

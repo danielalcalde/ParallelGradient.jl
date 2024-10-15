@@ -76,7 +76,7 @@ function ∇dpmap(cx, f::F, args::Vararg{Any, N}; pmap_function=pmap_chuncked, p
         # Merge the context gotten from the different workers
         if cx_type
             contexts = map(x->x[2], Δf_and_args_zipped_and_context)
-            update_context!(cx, contexts, params)
+            add_context!(cx, contexts, params)
         end
         (Δf, Δargs...)
       end
@@ -148,6 +148,7 @@ function ∇dpmap_scalar(cx, f::F, args::Vararg{Any, N}; pmap_function=pmap_chun
         # Multiply Δs with Δf_and_args_zipped
         Δf_and_args_zipped = map((Δ, y) -> fmap(z->mul_nothing(z, Δ), y), Δs, Δf_and_args_zipped)
         Δf_and_args = _unzip(Δf_and_args_zipped, Val(N + 1))
+
         Δf = reduce(accum, Δf_and_args[1]; init=nothing)
         Δargs = map(_restore, Δf_and_args[2:end], arg_ax)
         
