@@ -24,3 +24,5 @@ g = gradient(x, y) do
     return sum(dptmap(f, x, y))
 end
 ```
+
+Note that you can in principle use these functions wherever map is used.
