@@ -14,8 +14,7 @@
 You can add ParallelGradient to your Julia environment with:
 
 ```julia
-using Pkg
-Pkg.add("ParallelGradient")
+]add https://github.com/danielalcalde/ParallelGradient.jl/tree/main
 ```
 
 ## Usage Examples
