@@ -34,7 +34,7 @@ losses = OrderedDict(
 maps = OrderedDict(
     "ptmap" => ptmap,
     "dpmap" => dpmap,
-    "dpmap_chuncked" => (args...; kwargs...) -> dpmap(args...; pmap_function=pmap_chuncked, kwargs...),
+    "dpmap_chunked" => (args...; kwargs...) -> dpmap(args...; pmap_function=pmap_chunked, kwargs...),
     "dtmap" => dtmap,
     )
 

@@ -1,11 +1,11 @@
-pmap_w(f, workers::Vector{Int}, args...; kwargs...) = pmap_chuncked(f, args...; workers_=workers, kwargs...)
+pmap_w(f, workers::Vector{Int}, args...; kwargs...) = pmap_chunked(f, args...; workers_=workers, kwargs...)
 const pmap_function_workerid_ = Dict{Any, Any}(pmap => pmap_w)
 
 
 cunkit(c, interval::UnitRange) = map(x->x[interval], c)
 iterate_(f, args...) = [f(args_i...) for args_i in zip(args...)]
      
-function pmap_chuncked(f, c1, c...; input_chunking=true, workers_::Vector{Int}=workers())
+function pmap_chunked(f, c1, c...; input_chunking=true, workers_::Vector{Int}=workers())
     f_orig = f
     chunks = splitrange(Int(firstindex(c1)), Int(lastindex(c1)), length(workers_))
     all_w = workers_[1:length(chunks)]
@@ -24,7 +24,7 @@ function pmap_chuncked(f, c1, c...; input_chunking=true, workers_::Vector{Int}=w
     return vcat(fetch.(w_exec)...)
 end
 
-pmap_function_workerid_[pmap_chuncked] = nothing
+pmap_function_workerid_[pmap_chunked] = nothing
 
 
 function tmap_simple(f, args...)
@@ -51,7 +51,7 @@ end
 function get_nrthreads(; batch_size=nothing)
     local nr_threads
     if batch_size === nothing
-        nr_threads = pmap_chuncked((_)->Threads.nthreads(), workers(); workers_=workers())
+        nr_threads = pmap_chunked((_)->Threads.nthreads(), workers(); workers_=workers())
     elseif isinteger(batch_size)
         nr_threads = Int[batch_size for _ in workers()]
     elseif batch_size isa Vector{Int}
@@ -66,7 +66,7 @@ end
 ptmap combines pmap and tmap, it is a parallel map that uses calls threads on the workers for parallelism.
 The workers should be started with addprocs(nr_procs, exeflags="-t nr_threads")
 """
-function ptmap(f, args...; batch_size=nothing, pmap_function=pmap_chuncked, tmap_function=tmap, kwargs...)
+function ptmap(f, args...; batch_size=nothing, pmap_function=pmap_chunked, tmap_function=tmap, kwargs...)
     # We need to split the arguments into chunks for each worker
     nr_threads = Zygote.@ignore_derivatives get_nrthreads(; batch_size)
     chunks = Zygote.@ignore_derivatives splitrange(Int(firstindex(args[1])), Int(lastindex(args[1])), nr_threads)

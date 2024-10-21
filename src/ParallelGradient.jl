@@ -16,9 +16,9 @@ include("distributed_macro.jl")
 include("dpmap.jl")
 include("dtmap.jl")
 include("dptmap.jl")
+include("start_processes.jl")
 
-
-export tmap, pmap_chuncked
+export tmap, pmap_chunked
 export dpmap, dpmap_scalar, dtmap, ptmap, dptmap_scalar
 
 end # module ParallelGradient

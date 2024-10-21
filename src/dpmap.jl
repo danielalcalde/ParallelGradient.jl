@@ -19,8 +19,8 @@ function set_pull_dict!(key, i, val)
     Main.dpmap_pull_dict[key][i] = val
 end
 
-dpmap(f, args...; pmap_function=pmap_chuncked, pmap_function_workerid=nothing) = pmap_function(f, args...)
-function ∇dpmap(cx, f::F, args::Vararg{Any, N}; pmap_function=pmap_chuncked, pmap_function_workerid=nothing) where {F, N}
+dpmap(f, args...; pmap_function=pmap_chunked, pmap_function_workerid=nothing) = pmap_function(f, args...)
+function ∇dpmap(cx, f::F, args::Vararg{Any, N}; pmap_function=pmap_chunked, pmap_function_workerid=nothing) where {F, N}
     if pmap_function_workerid === nothing
         pmap_function_workerid = pmap_function_workerid_[pmap_function]
     end
@@ -96,8 +96,8 @@ mul_nothing(x, y) = x .* y
 is_nothing_or_zero(x) = isnothing(x) || iszero(x)
 
 
-dpmap_scalar(f, iter; pmap_function=pmap_chuncked) = pmap_function(f, iter)
-function ∇dpmap_scalar(cx, f::F, args::Vararg{Any, N}; pmap_function=pmap_chuncked) where {F, N}
+dpmap_scalar(f, iter; pmap_function=pmap_chunked) = pmap_function(f, iter)
+function ∇dpmap_scalar(cx, f::F, args::Vararg{Any, N}; pmap_function=pmap_chunked) where {F, N}
     cx_type = typeof(cx).parameters[1]
 
     params = Flux.params()

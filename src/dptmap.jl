@@ -1,5 +1,5 @@
-dptmap_scalar(f, iter...; pmap_function=pmap_chuncked, tmap_function=tmap, batch_size=nothing) = ptmap(f, iter...; pmap_function=pmap_function, tmap_function=tmap_function, batch_size=batch_size)
-function ∇dptmap_scalar(cx, f::F, args::Vararg{Any, N}; pmap_function=pmap_chuncked, tmap_function=tmap, batch_size=nothing) where {F, N}
+dptmap_scalar(f, iter...; pmap_function=pmap_chunked, tmap_function=tmap, batch_size=nothing) = ptmap(f, iter...; pmap_function=pmap_function, tmap_function=tmap_function, batch_size=batch_size)
+function ∇dptmap_scalar(cx, f::F, args::Vararg{Any, N}; pmap_function=pmap_chunked, tmap_function=tmap, batch_size=nothing) where {F, N}
     cx_type = typeof(cx).parameters[1]
 
     params = Flux.params()
