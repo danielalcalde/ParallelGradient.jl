@@ -11,6 +11,16 @@ function vcat_vec(vs::Vector{Vector{T}}; dims=length.(vs)) where T
     return v
 end
 
+function vcat_vec(vs::Vector{Vector}; dims=length.(vs))
+    v = Vector{Any}(undef, sum(dims))
+    j = 1
+    for (d, vi) in zip(dims, vs)
+       v[j:j+d-1] = vi
+       j += d
+    end
+    return v
+end
+
 function vcat_vec(vs::NTuple{N, Vector{T}}; dims=length.(vs)) where {N, T}  
     v = Vector{T}(undef, sum(dims))
     j = 1
